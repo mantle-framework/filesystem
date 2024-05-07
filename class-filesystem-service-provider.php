@@ -20,7 +20,7 @@ class Filesystem_Service_Provider extends Service_Provider implements Isolated_S
 	/**
 	 * Register the service provider.
 	 */
-	public function register(): void {
+	public function register() {
 		$this->register_native_filesystem();
 		$this->register_flysystem();
 	}
@@ -31,14 +31,24 @@ class Filesystem_Service_Provider extends Service_Provider implements Isolated_S
 	 * @return void
 	 */
 	protected function register_native_filesystem() {
-		$this->app->singleton( 'files', fn () => new Filesystem() );
+		$this->app->singleton(
+			'files',
+			function( $app ) {
+				return new Filesystem();
+			}
+		);
 	}
 
 	/**
 	 * Register the Flysystem Manager
 	 */
-	public function register_flysystem(): void {
-		$this->app->singleton( 'filesystem', fn ( $app ) => new Filesystem_Manager( $app ) );
+	public function register_flysystem() {
+		$this->app->singleton(
+			'filesystem',
+			function ( $app ) {
+				return new Filesystem_Manager( $app );
+			}
+		);
 	}
 
 	/**
@@ -46,6 +56,7 @@ class Filesystem_Service_Provider extends Service_Provider implements Isolated_S
 	 *
 	 * @param string $url Attachment URL.
 	 * @param int    $post_id Attachment ID.
+	 * @return string
 	 */
 	public function on_wp_get_attachment_url( string $url, int $post_id ): string {
 		static $doing_wp_get_attachment_url = false;

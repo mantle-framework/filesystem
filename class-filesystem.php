@@ -11,6 +11,7 @@ namespace Mantle\Filesystem;
 
 use ErrorException;
 use FilesystemIterator;
+use League\Flysystem\FileNotFoundException;
 use Mantle\Support\Str;
 use Mantle\Support\Traits\Macroable;
 use RuntimeException;
@@ -48,15 +49,16 @@ class Filesystem {
 	 *
 	 * @param  string $path
 	 * @param  bool   $lock
+	 * @return string
 	 *
-	 * @throws File_Not_Found_Exception Thrown on missing file.
+	 * @throws FileNotFoundException Thrown on missing file.
 	 */
-	public function get( string $path, bool $lock = false ): string {
+	public function get( $path, $lock = false ) {
 		if ( $this->is_file( $path ) ) {
 			return $lock ? $this->shared_get( $path ) : file_get_contents( $path ); // phpcs:ignore WordPressVIPMinimum.Performance.FetchingRemoteData.FileGetContentsUnknown
 		}
 
-		throw new File_Not_Found_Exception( "File does not exist at path {$path}." );
+		throw new FileNotFoundException( "File does not exist at path {$path}." );
 	}
 
 	/**
@@ -94,7 +96,7 @@ class Filesystem {
 	 * @param  array  $data
 	 * @return mixed
 	 *
-	 * @throws File_Not_Found_Exception Thrown on missing file.
+	 * @throws FileNotFoundException Thrown on missing file.
 	 */
 	public function get_require( $path, array $data = [] ) {
 		if ( $this->is_file( $path ) ) {
@@ -108,7 +110,7 @@ class Filesystem {
 			} )();
 		}
 
-		throw new File_Not_Found_Exception( "File does not exist at path {$path}." );
+		throw new FileNotFoundException( "File does not exist at path {$path}." );
 	}
 
 	/**
@@ -118,7 +120,7 @@ class Filesystem {
 	 * @param  array  $data
 	 * @return mixed
 	 *
-	 * @throws File_Not_Found_Exception Thrown on missing file.
+	 * @throws FileNotFoundException Thrown on missing file.
 	 */
 	public function require_once( $path, array $data = [] ) {
 		if ( $this->is_file( $path ) ) {
@@ -132,7 +134,7 @@ class Filesystem {
 			} )();
 		}
 
-		throw new File_Not_Found_Exception( "File does not exist at path {$path}." );
+		throw new FileNotFoundException( "File does not exist at path {$path}." );
 	}
 
 	/**
@@ -162,8 +164,9 @@ class Filesystem {
 	 *
 	 * @param  string $path
 	 * @param  string $content
+	 * @return void
 	 */
-	public function replace( $path, $content ): void {
+	public function replace( $path, $content ) {
 		// If the path already exists and is a symlink, get the real path...
 		clearstatcache( true, $path );
 
@@ -236,7 +239,7 @@ class Filesystem {
 				if ( ! @unlink( $path ) ) { // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
 					$success = false;
 				}
-			} catch ( ErrorException ) {
+			} catch ( ErrorException $e ) {
 				$success = false;
 			}
 		}
@@ -271,8 +274,9 @@ class Filesystem {
 	 *
 	 * @param  string $target
 	 * @param  string $link
+	 * @return void
 	 */
-	public function link( $target, $link ): void {
+	public function link( $target, $link ) {
 		$mode = $this->is_directory( $target ) ? 'J' : 'H';
 
 		exec( "mklink /{$mode} " . escapeshellarg( $link ) . ' ' . escapeshellarg( $target ) ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.system_calls_exec
@@ -340,6 +344,7 @@ class Filesystem {
 	 * Guess the class name for a file path.
 	 *
 	 * @param string $path File path.
+	 * @return string|null
 	 */
 	public function guess_class_name( string $path ): ?string {
 		$name = $this->name( $path );
@@ -476,8 +481,9 @@ class Filesystem {
 	 * Get all of the directories within a given directory.
 	 *
 	 * @param  string $directory
+	 * @return array
 	 */
-	public function directories( $directory ): array {
+	public function directories( $directory ) {
 		$directories = [];
 
 		foreach ( Finder::create()->in( $directory )->directories()->depth( 0 )->sortByName() as $dir ) {
@@ -493,8 +499,9 @@ class Filesystem {
 	 * @param  string $path
 	 * @param  int    $mode
 	 * @param  bool   $recursive
+	 * @return void
 	 */
-	public function ensure_directory_exists( $path, $mode = 0755, $recursive = true ): void {
+	public function ensure_directory_exists( $path, $mode = 0755, $recursive = true ) {
 		if ( ! $this->is_directory( $path ) ) {
 			$this->make_directory( $path, $mode, $recursive );
 		}
@@ -518,8 +525,9 @@ class Filesystem {
 	 * @param  string $from
 	 * @param  string $to
 	 * @param  bool   $overwrite
+	 * @return bool
 	 */
-	public function move_directory( $from, $to, $overwrite = false ): bool {
+	public function move_directory( $from, $to, $overwrite = false ) {
 		if ( $overwrite && $this->is_directory( $to ) && ! $this->delete_directory( $to ) ) {
 			return false;
 		}
@@ -533,8 +541,9 @@ class Filesystem {
 	 * @param  string   $directory
 	 * @param  string   $destination
 	 * @param  int|null $options
+	 * @return bool
 	 */
-	public function copy_directory( $directory, $destination, $options = null ): bool {
+	public function copy_directory( $directory, $destination, $options = null ) {
 		if ( ! $this->is_directory( $directory ) ) {
 			return false;
 		}
@@ -581,8 +590,9 @@ class Filesystem {
 	 *
 	 * @param  string $directory
 	 * @param  bool   $preserve
+	 * @return bool
 	 */
-	public function delete_directory( $directory, $preserve = false ): bool {
+	public function delete_directory( $directory, $preserve = false ) {
 		if ( ! $this->is_directory( $directory ) ) {
 			return false;
 		}
@@ -615,13 +625,14 @@ class Filesystem {
 	 * Remove all of the directories within a given directory.
 	 *
 	 * @param  string $directory
+	 * @return bool
 	 */
-	public function delete_directories( $directory ): bool {
+	public function delete_directories( $directory ) {
 		$all_directories = $this->directories( $directory );
 
 		if ( ! empty( $all_directories ) ) {
-			foreach ( $all_directories as $all_directory ) {
-				$this->delete_directory( $all_directory );
+			foreach ( $all_directories as $directory_name ) {
+				$this->delete_directory( $directory_name );
 			}
 
 			return true;
