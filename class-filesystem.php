@@ -11,6 +11,7 @@ namespace Mantle\Filesystem;
 
 use ErrorException;
 use FilesystemIterator;
+use League\Flysystem\FileNotFoundException;
 use Mantle\Support\Str;
 use Mantle\Support\Traits\Macroable;
 use RuntimeException;
@@ -48,15 +49,16 @@ class Filesystem {
 	 *
 	 * @param  string $path
 	 * @param  bool   $lock
+	 * @return string
 	 *
-	 * @throws File_Not_Found_Exception Thrown on missing file.
+	 * @throws FileNotFoundException Thrown on missing file.
 	 */
-	public function get( string $path, bool $lock = false ): string {
+	public function get( $path, $lock = false ) {
 		if ( $this->is_file( $path ) ) {
 			return $lock ? $this->shared_get( $path ) : file_get_contents( $path ); // phpcs:ignore WordPressVIPMinimum.Performance.FetchingRemoteData.FileGetContentsUnknown
 		}
 
-		throw new File_Not_Found_Exception( "File does not exist at path {$path}." );
+		throw new FileNotFoundException( "File does not exist at path {$path}." );
 	}
 
 	/**
@@ -68,14 +70,14 @@ class Filesystem {
 	public function shared_get( $path ) {
 		$contents = '';
 
-		$handle = fopen( $path, 'rb' ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fopen
+		$handle = fopen( $path, 'rb' ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_read_fopen
 
 		if ( $handle ) {
 			try {
 				if ( flock( $handle, LOCK_SH ) ) {
 					clearstatcache( true, $path );
 
-					$contents = fread( $handle, $this->size( $path ) ?: 1 ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fread
+					$contents = fread( $handle, $this->size( $path ) ?: 1 ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_read_fread
 
 					flock( $handle, LOCK_UN );
 				}
@@ -94,7 +96,7 @@ class Filesystem {
 	 * @param  array  $data
 	 * @return mixed
 	 *
-	 * @throws File_Not_Found_Exception Thrown on missing file.
+	 * @throws FileNotFoundException Thrown on missing file.
 	 */
 	public function get_require( $path, array $data = [] ) {
 		if ( $this->is_file( $path ) ) {
@@ -102,13 +104,13 @@ class Filesystem {
 			$__data = $data;
 
 			return ( static function () use ( $__path, $__data ) {
-				extract( $__data, EXTR_SKIP ); // phpcs:ignore WordPress.PHP.DontExtract.extract_extract, WordPress.PHP.DiscouragedPHPFunctions.extract_extract
+				extract( $__data, EXTR_SKIP );
 
-				return require $__path; // phpcs:ignore WordPressVIPMinimum.Files.IncludingFile.UsingVariable
+				return require $__path;
 			} )();
 		}
 
-		throw new File_Not_Found_Exception( "File does not exist at path {$path}." );
+		throw new FileNotFoundException( "File does not exist at path {$path}." );
 	}
 
 	/**
@@ -118,7 +120,7 @@ class Filesystem {
 	 * @param  array  $data
 	 * @return mixed
 	 *
-	 * @throws File_Not_Found_Exception Thrown on missing file.
+	 * @throws FileNotFoundException Thrown on missing file.
 	 */
 	public function require_once( $path, array $data = [] ) {
 		if ( $this->is_file( $path ) ) {
@@ -126,13 +128,13 @@ class Filesystem {
 			$__data = $data;
 
 			return ( static function () use ( $__path, $__data ) {
-				extract( $__data, EXTR_SKIP ); // phpcs:ignore WordPress.PHP.DontExtract.extract_extract, WordPress.PHP.DiscouragedPHPFunctions.extract_extract
+				extract( $__data, EXTR_SKIP );
 
-				return require_once $__path; // phpcs:ignore WordPressVIPMinimum.Files.IncludingFile.UsingVariable
+				return require_once $__path;
 			} )();
 		}
 
-		throw new File_Not_Found_Exception( "File does not exist at path {$path}." );
+		throw new FileNotFoundException( "File does not exist at path {$path}." );
 	}
 
 	/**
@@ -162,8 +164,9 @@ class Filesystem {
 	 *
 	 * @param  string $path
 	 * @param  string $content
+	 * @return void
 	 */
-	public function replace( $path, $content ): void {
+	public function replace( $path, $content ) {
 		// If the path already exists and is a symlink, get the real path...
 		clearstatcache( true, $path );
 
@@ -223,19 +226,20 @@ class Filesystem {
 	/**
 	 * Delete the file at a given path.
 	 *
-	 * @param  string ...$paths
+	 * @param  string|array $paths
+	 * @return bool
 	 */
-	public function delete( ...$paths ): bool {
+	public function delete( $paths ) {
+		$paths = is_array( $paths ) ? $paths : func_get_args();
+
 		$success = true;
 
 		foreach ( $paths as $path ) {
 			try {
-				if ( @unlink( $path ) ) { // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, Generic.PHP.NoSilencedErrors.Forbidden
-					clearstatcache( false, $path );
-				} else {
+				if ( ! @unlink( $path ) ) { // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
 					$success = false;
 				}
-			} catch ( ErrorException ) {
+			} catch ( ErrorException $e ) {
 				$success = false;
 			}
 		}
@@ -270,8 +274,9 @@ class Filesystem {
 	 *
 	 * @param  string $target
 	 * @param  string $link
+	 * @return void
 	 */
-	public function link( $target, $link ): void {
+	public function link( $target, $link ) {
 		$mode = $this->is_directory( $target ) ? 'J' : 'H';
 
 		exec( "mklink /{$mode} " . escapeshellarg( $link ) . ' ' . escapeshellarg( $target ) ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.system_calls_exec
@@ -339,6 +344,7 @@ class Filesystem {
 	 * Guess the class name for a file path.
 	 *
 	 * @param string $path File path.
+	 * @return string|null
 	 */
 	public function guess_class_name( string $path ): ?string {
 		$name = $this->name( $path );
@@ -475,8 +481,9 @@ class Filesystem {
 	 * Get all of the directories within a given directory.
 	 *
 	 * @param  string $directory
+	 * @return array
 	 */
-	public function directories( $directory ): array {
+	public function directories( $directory ) {
 		$directories = [];
 
 		foreach ( Finder::create()->in( $directory )->directories()->depth( 0 )->sortByName() as $dir ) {
@@ -492,8 +499,9 @@ class Filesystem {
 	 * @param  string $path
 	 * @param  int    $mode
 	 * @param  bool   $recursive
+	 * @return void
 	 */
-	public function ensure_directory_exists( string $path, int $mode = 0755, bool $recursive = true ): void {
+	public function ensure_directory_exists( $path, $mode = 0755, $recursive = true ) {
 		if ( ! $this->is_directory( $path ) ) {
 			$this->make_directory( $path, $mode, $recursive );
 		}
@@ -507,7 +515,7 @@ class Filesystem {
 	 * @param  bool   $recursive
 	 * @return bool
 	 */
-	public function make_directory( string $path, int $mode = 0755, bool $recursive = false ) {
+	public function make_directory( $path, $mode = 0755, $recursive = false ) {
 		return mkdir( $path, $mode, $recursive );
 	}
 
@@ -517,13 +525,14 @@ class Filesystem {
 	 * @param  string $from
 	 * @param  string $to
 	 * @param  bool   $overwrite
+	 * @return bool
 	 */
-	public function move_directory( string $from, string $to, bool $overwrite = false ): bool {
+	public function move_directory( $from, $to, $overwrite = false ) {
 		if ( $overwrite && $this->is_directory( $to ) && ! $this->delete_directory( $to ) ) {
 			return false;
 		}
 
-		return @rename( $from, $to ) === true; // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, Generic.PHP.NoSilencedErrors.Forbidden
+		return @rename( $from, $to ) === true; // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
 	}
 
 	/**
@@ -532,8 +541,9 @@ class Filesystem {
 	 * @param  string   $directory
 	 * @param  string   $destination
 	 * @param  int|null $options
+	 * @return bool
 	 */
-	public function copy_directory( string $directory, string $destination, ?int $options = null ): bool {
+	public function copy_directory( $directory, $destination, $options = null ) {
 		if ( ! $this->is_directory( $directory ) ) {
 			return false;
 		}
@@ -559,11 +569,14 @@ class Filesystem {
 				if ( ! $this->copy_directory( $path, $target, $options ) ) {
 					return false;
 				}
-			} elseif ( ! $this->copy( $item->getPathname(), $target ) ) {
+			} else {
+
 				// If the current items is just a regular file, we will just copy this to the new
 				// location and keep looping. If for some reason the copy fails we'll bail out
 				// and return false, so the developer is aware that the copy process failed.
-				return false;
+				if ( ! $this->copy( $item->getPathname(), $target ) ) {
+					return false;
+				}
 			}
 		}
 
@@ -577,8 +590,9 @@ class Filesystem {
 	 *
 	 * @param  string $directory
 	 * @param  bool   $preserve
+	 * @return bool
 	 */
-	public function delete_directory( $directory, $preserve = false ): bool {
+	public function delete_directory( $directory, $preserve = false ) {
 		if ( ! $this->is_directory( $directory ) ) {
 			return false;
 		}
@@ -592,6 +606,7 @@ class Filesystem {
 			if ( $item->isDir() && ! $item->isLink() ) {
 				$this->delete_directory( $item->getPathname() );
 			} else {
+
 				// If the item is just a file, we can go ahead and delete it since we're
 				// just looping through and waxing all of the files in this directory
 				// and calling directories recursively, so we delete the real path.
@@ -599,10 +614,8 @@ class Filesystem {
 			}
 		}
 
-		unset( $items );
-
 		if ( ! $preserve ) {
-			@rmdir( $directory ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, Generic.PHP.NoSilencedErrors.Forbidden
+			@rmdir( $directory ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
 		}
 
 		return true;
@@ -612,13 +625,14 @@ class Filesystem {
 	 * Remove all of the directories within a given directory.
 	 *
 	 * @param  string $directory
+	 * @return bool
 	 */
-	public function delete_directories( $directory ): bool {
+	public function delete_directories( $directory ) {
 		$all_directories = $this->directories( $directory );
 
 		if ( ! empty( $all_directories ) ) {
-			foreach ( $all_directories as $all_directory ) {
-				$this->delete_directory( $all_directory );
+			foreach ( $all_directories as $directory_name ) {
+				$this->delete_directory( $directory_name );
 			}
 
 			return true;

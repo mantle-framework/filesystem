@@ -18,10 +18,12 @@ trait File_Helpers {
 	 *
 	 * @var string
 	 */
-	protected $hash_name;
+	protected $hash_name = null;
 
 	/**
 	 * Get the fully qualified path to the file.
+	 *
+	 * @return string
 	 */
 	public function path(): string {
 		return $this->getRealPath();
@@ -29,6 +31,8 @@ trait File_Helpers {
 
 	/**
 	 * Get the file's extension.
+	 *
+	 * @return string
 	 */
 	public function extension(): string {
 		return $this->guessExtension();
@@ -38,8 +42,9 @@ trait File_Helpers {
 	 * Get a filename for the file.
 	 *
 	 * @param string|null $path File path.
+	 * @return string
 	 */
-	public function hash_name( ?string $path = null ): string {
+	public function hash_name( string $path = null ): string {
 		if ( $path ) {
 			$path = rtrim( $path, '/' ) . '/';
 		}
