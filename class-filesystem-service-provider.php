@@ -54,11 +54,9 @@ class Filesystem_Service_Provider extends Service_Provider implements Isolated_S
 			$doing_wp_get_attachment_url = true;
 
 			$attachment = Attachment::find( $post_id );
-			if ( $attachment instanceof Attachment ) {
+			if ( $attachment instanceof \Mantle\Database\Model\Attachment ) {
 				try {
-					if ( $attachment_url = $attachment->url() ) {
-						$url = $attachment_url;
-					}
+					$url = $attachment->url();
 				} catch ( RuntimeException $e ) {
 					unset( $e );
 				}

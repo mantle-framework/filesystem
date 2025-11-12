@@ -51,7 +51,7 @@ class Filesystem {
 	 */
 	public function get( string $path, bool $lock = false ): string {
 		if ( $this->is_file( $path ) ) {
-			return $lock ? (string) $this->shared_get( $path ) : (string) file_get_contents( $path ); // phpcs:ignore WordPressVIPMinimum.Performance.FetchingRemoteData.FileGetContentsUnknown
+			return $lock ? $this->shared_get( $path ) : file_get_contents( $path ); // phpcs:ignore WordPressVIPMinimum.Performance.FetchingRemoteData.FileGetContentsUnknown
 		}
 
 		throw new File_Not_Found_Exception( "File does not exist at path {$path}." );
@@ -73,7 +73,7 @@ class Filesystem {
 				if ( flock( $handle, LOCK_SH ) ) {
 					clearstatcache( true, $path );
 
-					$contents = fread( $handle, max( 1, (int) $this->size( $path ) ) ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fread
+					$contents = fread( $handle, $this->size( $path ) ?: 1 ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fread
 
 					flock( $handle, LOCK_UN );
 				}
@@ -139,8 +139,9 @@ class Filesystem {
 	 * Get the MD5 hash of the file at the given path.
 	 *
 	 * @param  string $path
+	 * @return string
 	 */
-	public function hash( string $path ): string|false {
+	public function hash( string $path ) {
 		return md5_file( $path );
 	}
 
@@ -339,7 +340,7 @@ class Filesystem {
 			);
 		}
 
-		return ( new MimeTypes() )->getExtensions( (string) $this->mime_type( $path ) )[0] ?? null;
+		return ( new MimeTypes() )->getExtensions( $this->mime_type( $path ) )[0] ?? null;
 	}
 
 	/**
@@ -351,7 +352,7 @@ class Filesystem {
 		$name = $this->name( $path );
 
 		if ( Str::starts_with( $name, [ 'class-', 'trait-', 'interface-' ] ) ) {
-			$name = (string) preg_replace( '/^(\w*-)/', '', $name, 1 );
+			$name = preg_replace( '/^(\w*-)/', '', $name, 1 );
 
 			return Str::studly_underscore( $name );
 		}
@@ -374,12 +375,7 @@ class Filesystem {
 	 * @param  string $path
 	 */
 	public function mime_type( string $path ): string|false {
-		$finfo = finfo_open( FILEINFO_MIME_TYPE );
-		if ( ! $finfo ) {
-			return false;
-		}
-
-		return finfo_file( $finfo, $path );
+		return finfo_file( finfo_open( FILEINFO_MIME_TYPE ), $path );
 	}
 
 	/**
@@ -441,10 +437,10 @@ class Filesystem {
 	 *
 	 * @param  string $pattern
 	 * @param  int    $flags
-	 * @return array<string>
+	 * @return array<mixed>
 	 */
 	public function glob( string $pattern, int $flags = 0 ): array {
-		return glob( $pattern, $flags ) ?: [];
+		return glob( $pattern, $flags );
 	}
 
 	/**
@@ -554,8 +550,6 @@ class Filesystem {
 		$items = new FilesystemIterator( $directory, $options );
 
 		foreach ( $items as $item ) {
-			assert( $item instanceof \SplFileInfo );
-
 			// As we spin through items, we will check to see if the current file is actually
 			// a directory or a file. When it is actually a directory we will need to call
 			// back into this function recursively to keep copying these nested folders.
@@ -594,8 +588,6 @@ class Filesystem {
 		$items = new FilesystemIterator( $directory );
 
 		foreach ( $items as $item ) {
-			assert( $item instanceof \SplFileInfo );
-
 			// If the item is a directory, we can just recurse into the function and
 			// delete that sub-directory otherwise we'll just delete the file and
 			// keep iterating through each file until the directory is cleaned.
